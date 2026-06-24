@@ -1,85 +1,200 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 from statsmodels.tsa.arima.model import ARIMA
 from datetime import datetime
 import warnings
 
 warnings.filterwarnings("ignore")
 
-# -------------------------
-# Streamlit Page Settings
-# -------------------------
+# ----------------------------
+# PAGE CONFIG
+# ----------------------------
 st.set_page_config(
-    page_title="Stock Price Forecast using ARIMA",
+    page_title="Stock Forecast Dashboard",
     page_icon="📈",
     layout="wide"
 )
 
-st.title("📈 Stock Price Forecast using ARIMA")
-st.write(
-    "Fetch the last 5 years of stock data from Yahoo Finance and "
-    "forecast the stock price for June 2027 using ARIMA."
+# ----------------------------
+# CUSTOM CSS
+# ----------------------------
+st.markdown("""
+<style>
+
+.main {
+    background-color: #0E1117;
+}
+
+.title {
+    text-align: center;
+    font-size: 48px;
+    font-weight: bold;
+    color: white;
+}
+
+.subtitle {
+    text-align: center;
+    color: #B0B0B0;
+    font-size: 18px;
+    margin-bottom: 40px;
+}
+
+.metric-card {
+    background: linear-gradient(135deg, #1E293B, #0F172A);
+    padding: 20px;
+    border-radius: 20px;
+    text-align: center;
+}
+
+.forecast-card {
+    background: linear-gradient(
+        135deg,
+        #16A34A,
+        #166534
+    );
+    padding: 35px;
+    border-radius: 20px;
+    text-align: center;
+    color: white;
+    font-size: 32px;
+    font-weight: bold;
+    margin-top: 20px;
+}
+
+.block-container {
+    padding-top: 2rem;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# ----------------------------
+# HEADER
+# ----------------------------
+st.markdown(
+    '<div class="title">📈 Stock Price Forecast Dashboard</div>',
+    unsafe_allow_html=True
 )
 
-# -------------------------
-# User Input
-# -------------------------
-ticker = st.text_input(
+st.markdown(
+    '<div class="subtitle">'
+    'Yahoo Finance + ARIMA Forecasting Model'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+# ----------------------------
+# SIDEBAR
+# ----------------------------
+st.sidebar.title("⚙️ Settings")
+
+ticker = st.sidebar.text_input(
     "Enter Stock Ticker",
-    value="RELIANCE.NS"
+    "RELIANCE.NS"
 )
 
-# -------------------------
-# Button
-# -------------------------
-if st.button("Generate Forecast"):
+run = st.sidebar.button("🚀 Generate Forecast")
+
+# ----------------------------
+# MAIN APP
+# ----------------------------
+if run:
 
     try:
-        # Get last 5 years of data
+        # Dates
         end_date = datetime.today()
-        start_date = end_date.replace(year=end_date.year - 5)
-
-        data = yf.download(
-            ticker,
-            start=start_date,
-            end=end_date,
-            progress=False,
-            auto_adjust=True
+        start_date = end_date.replace(
+            year=end_date.year - 5
         )
+
+        # Download Data
+        with st.spinner("Fetching stock data..."):
+
+            data = yf.download(
+                ticker,
+                start=start_date,
+                end=end_date,
+                progress=False,
+                auto_adjust=True
+            )
 
         if data.empty:
-            st.error("No data found for this ticker.")
+            st.error("No data found.")
             st.stop()
 
-        # Closing prices
         close_prices = data["Close"].dropna()
 
-        # -------------------------
-        # Historical Price Chart
-        # -------------------------
-        st.subheader("Last 5 Years Closing Prices")
+        # ----------------------------
+        # METRICS
+        # ----------------------------
+        latest_price = float(close_prices.iloc[-1])
+        highest_price = float(close_prices.max())
+        lowest_price = float(close_prices.min())
 
-        fig, ax = plt.subplots(figsize=(12, 5))
-        ax.plot(
-            close_prices.index,
-            close_prices.values,
-            linewidth=2
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric(
+            "💰 Current Price",
+            f"₹{latest_price:,.2f}"
         )
-        ax.set_title(f"{ticker} Closing Price")
-        ax.set_xlabel("Date")
-        ax.set_ylabel("Price")
-        plt.xticks(rotation=45)
 
-        st.pyplot(fig)
+        col2.metric(
+            "📈 5Y High",
+            f"₹{highest_price:,.2f}"
+        )
 
-        # -------------------------
-        # Monthly Data for ARIMA
-        # -------------------------
-        monthly_prices = close_prices.resample("ME").last()
+        col3.metric(
+            "📉 5Y Low",
+            f"₹{lowest_price:,.2f}"
+        )
 
-        # ARIMA Model
+        st.divider()
+
+        # ----------------------------
+        # HISTORICAL CHART
+        # ----------------------------
+        st.subheader("📊 Last 5 Years Price Chart")
+
+        fig = go.Figure()
+
+        fig.add_trace(
+            go.Scatter(
+                x=close_prices.index,
+                y=close_prices.values,
+                mode="lines",
+                name="Closing Price"
+            )
+        )
+
+        fig.update_layout(
+            template="plotly_dark",
+            height=500,
+            xaxis_title="Date",
+            yaxis_title="Price",
+            hovermode="x unified"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+        st.divider()
+
+        # ----------------------------
+        # MONTHLY DATA
+        # ----------------------------
+        monthly_prices = (
+            close_prices
+            .resample("ME")
+            .last()
+        )
+
+        # ----------------------------
+        # ARIMA MODEL
+        # ----------------------------
         model = ARIMA(
             monthly_prices,
             order=(5, 1, 0)
@@ -87,14 +202,19 @@ if st.button("Generate Forecast"):
 
         model_fit = model.fit()
 
-        # -------------------------
-        # Forecast until June 2027
-        # -------------------------
-        forecast_end = pd.Timestamp("2027-06-30")
+        # ----------------------------
+        # FORECAST TO JUNE 2027
+        # ----------------------------
+        forecast_end = pd.Timestamp(
+            "2027-06-30"
+        )
 
         months_ahead = (
-            (forecast_end.year - monthly_prices.index[-1].year) * 12
-            + (forecast_end.month - monthly_prices.index[-1].month)
+            (forecast_end.year -
+             monthly_prices.index[-1].year) * 12
+            +
+            (forecast_end.month -
+             monthly_prices.index[-1].month)
         )
 
         if months_ahead <= 0:
@@ -104,59 +224,87 @@ if st.button("Generate Forecast"):
             steps=months_ahead
         )
 
-        # June 2027 Prediction
-        june_2027_price = forecast.iloc[-1]
-
-        st.subheader("ARIMA Forecast")
-
-        st.success(
-            f"Predicted {ticker} Price for June 2027: "
-            f"₹{june_2027_price:.2f}"
-        )
-
-        # -------------------------
-        # Forecast Dates
-        # -------------------------
         forecast_dates = pd.date_range(
             start=monthly_prices.index[-1],
             periods=months_ahead + 1,
             freq="ME"
         )[1:]
 
-        # -------------------------
-        # Forecast Chart
-        # -------------------------
-        fig2, ax2 = plt.subplots(figsize=(12, 5))
-
-        ax2.plot(
-            monthly_prices.index,
-            monthly_prices.values,
-            label="Historical Prices",
-            linewidth=2
+        predicted_price = float(
+            forecast.iloc[-1]
         )
 
-        ax2.plot(
-            forecast_dates,
-            forecast.values,
-            label="Forecast Prices",
-            linewidth=2
+        # ----------------------------
+        # FORECAST CARD
+        # ----------------------------
+        st.subheader("🤖 ARIMA Forecast")
+
+        st.markdown(
+            f"""
+            <div class="forecast-card">
+                Predicted {ticker} Price<br>
+                for June 2027
+                <br><br>
+                ₹ {predicted_price:,.2f}
+            </div>
+            """,
+            unsafe_allow_html=True
         )
 
-        ax2.set_title(
-            f"{ticker} Historical and Forecast Prices"
+        st.divider()
+
+        # ----------------------------
+        # FORECAST CHART
+        # ----------------------------
+        st.subheader(
+            "📈 Historical vs Forecast"
         )
 
-        ax2.set_xlabel("Date")
-        ax2.set_ylabel("Price")
-        ax2.legend()
+        fig2 = go.Figure()
 
-        st.pyplot(fig2)
+        fig2.add_trace(
+            go.Scatter(
+                x=monthly_prices.index,
+                y=monthly_prices.values,
+                mode="lines",
+                name="Historical Prices"
+            )
+        )
 
-        # -------------------------
-        # Data Table
-        # -------------------------
-        st.subheader("Recent Stock Data")
-        st.dataframe(data.tail())
+        fig2.add_trace(
+            go.Scatter(
+                x=forecast_dates,
+                y=forecast.values,
+                mode="lines+markers",
+                name="Forecast"
+            )
+        )
+
+        fig2.update_layout(
+            template="plotly_dark",
+            height=550,
+            xaxis_title="Date",
+            yaxis_title="Price",
+            hovermode="x unified"
+        )
+
+        st.plotly_chart(
+            fig2,
+            use_container_width=True
+        )
+
+        st.divider()
+
+        # ----------------------------
+        # RECENT DATA
+        # ----------------------------
+        with st.expander(
+            "📄 View Recent Stock Data"
+        ):
+            st.dataframe(
+                data.tail(10),
+                use_container_width=True
+            )
 
     except Exception as e:
         st.error(f"Error: {e}")
