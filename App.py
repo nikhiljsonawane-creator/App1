@@ -3,23 +3,22 @@ import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
 from statsmodels.tsa.arima.model import ARIMA
-from datetime import datetime
 import warnings
 
 warnings.filterwarnings("ignore")
 
-# ----------------------------
-# PAGE SETTINGS
-# ----------------------------
+# -------------------------------------------------
+# PAGE CONFIG
+# -------------------------------------------------
 st.set_page_config(
     page_title="Stock Price Forecast Dashboard",
     page_icon="📈",
     layout="wide"
 )
 
-# ----------------------------
+# -------------------------------------------------
 # CUSTOM CSS
-# ----------------------------
+# -------------------------------------------------
 st.markdown("""
 <style>
 
@@ -36,13 +35,13 @@ st.markdown("""
 
 .sub-title {
     text-align: center;
-    font-size: 18px;
+    font-size: 20px;
     color: #B0B0B0;
     margin-bottom: 40px;
 }
 
 .prediction-box {
-    background: linear-gradient(90deg, #11998e, #38ef7d);
+    background: linear-gradient(90deg,#11998e,#38ef7d);
     padding: 35px;
     border-radius: 20px;
     text-align: center;
@@ -53,17 +52,17 @@ st.markdown("""
 
 div[data-testid="metric-container"] {
     background-color: #1E293B;
+    border: 1px solid #334155;
     padding: 20px;
     border-radius: 15px;
-    border: 1px solid #334155;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------------------
+# -------------------------------------------------
 # HEADER
-# ----------------------------
+# -------------------------------------------------
 st.markdown(
     '<p class="main-title">📈 Stock Price Forecast Dashboard</p>',
     unsafe_allow_html=True
@@ -74,9 +73,9 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ----------------------------
+# -------------------------------------------------
 # SIDEBAR
-# ----------------------------
+# -------------------------------------------------
 st.sidebar.title("⚙️ Dashboard Settings")
 
 ticker = st.sidebar.text_input(
@@ -84,49 +83,46 @@ ticker = st.sidebar.text_input(
     "RELIANCE.NS"
 )
 
+ticker = ticker.strip().upper()
+
 run = st.sidebar.button("🚀 Generate Forecast")
 
-# ----------------------------
+# -------------------------------------------------
 # MAIN APP
-# ----------------------------
+# -------------------------------------------------
 if run:
 
     try:
-        end_date = datetime.today()
-        start_date = end_date.replace(
-            year=end_date.year - 5
-        )
 
         with st.spinner("Fetching stock data..."):
 
             data = yf.download(
                 ticker,
-                start=start_date,
-                end=end_date,
-                progress=False,
-                auto_adjust=True
+                period="5y",
+                auto_adjust=True,
+                progress=False
             )
 
         if data.empty:
-            st.error("No data found.")
+            st.error("No data found for this ticker.")
             st.stop()
 
-        close_prices = data["Close"].dropna()
+        # -----------------------------------------
+        # FIX FOR SERIES ERROR
+        # -----------------------------------------
+        close_prices = data["Close"]
 
-        # ----------------------------
+        if isinstance(close_prices, pd.DataFrame):
+            close_prices = close_prices.iloc[:, 0]
+
+        close_prices = close_prices.dropna()
+
+        # -----------------------------------------
         # METRICS
-        # ----------------------------
-        current_price = float(
-            close_prices.iloc[-1]
-        )
-
-        highest_price = float(
-            close_prices.max()
-        )
-
-        lowest_price = float(
-            close_prices.min()
-        )
+        # -----------------------------------------
+        current_price = float(close_prices.iloc[-1])
+        highest_price = float(close_prices.max())
+        lowest_price = float(close_prices.min())
 
         st.subheader("📊 Stock Statistics")
 
@@ -149,12 +145,10 @@ if run:
 
         st.divider()
 
-        # ----------------------------
+        # -----------------------------------------
         # HISTORICAL CHART
-        # ----------------------------
-        st.subheader(
-            "📈 Last 5 Years Closing Price"
-        )
+        # -----------------------------------------
+        st.subheader("📈 Last 5 Years Price Chart")
 
         fig, ax = plt.subplots(
             figsize=(14, 6)
@@ -163,7 +157,8 @@ if run:
         ax.plot(
             close_prices.index,
             close_prices.values,
-            linewidth=2
+            linewidth=2,
+            color="#38ef7d"
         )
 
         ax.set_title(
@@ -180,18 +175,18 @@ if run:
 
         st.divider()
 
-        # ----------------------------
-        # MONTHLY DATA
-        # ----------------------------
+        # -----------------------------------------
+        # MONTHLY DATA FOR ARIMA
+        # -----------------------------------------
         monthly_prices = (
             close_prices
             .resample("ME")
             .last()
         )
 
-        # ----------------------------
+        # -----------------------------------------
         # ARIMA MODEL
-        # ----------------------------
+        # -----------------------------------------
         model = ARIMA(
             monthly_prices,
             order=(5, 1, 0)
@@ -199,18 +194,18 @@ if run:
 
         model_fit = model.fit()
 
-        # ----------------------------
-        # FORECAST UNTIL JUNE 2027
-        # ----------------------------
-        forecast_end = pd.Timestamp(
+        # -----------------------------------------
+        # FORECAST TO JUNE 2027
+        # -----------------------------------------
+        target_date = pd.Timestamp(
             "2027-06-30"
         )
 
         months_ahead = (
-            (forecast_end.year -
+            (target_date.year -
              monthly_prices.index[-1].year) * 12
             +
-            (forecast_end.month -
+            (target_date.month -
              monthly_prices.index[-1].month)
         )
 
@@ -231,19 +226,15 @@ if run:
             forecast.iloc[-1]
         )
 
-        # ----------------------------
+        # -----------------------------------------
         # FORECAST CARD
-        # ----------------------------
-        st.subheader(
-            "🤖 ARIMA Forecast"
-        )
+        # -----------------------------------------
+        st.subheader("🤖 ARIMA Forecast")
 
         st.markdown(
             f"""
             <div class="prediction-box">
-                Predicted {ticker} Price
-                <br><br>
-                June 2027
+                Predicted Price for June 2027
                 <br><br>
                 ₹ {predicted_price:,.2f}
             </div>
@@ -253,9 +244,9 @@ if run:
 
         st.divider()
 
-        # ----------------------------
+        # -----------------------------------------
         # FORECAST CHART
-        # ----------------------------
+        # -----------------------------------------
         st.subheader(
             "📈 Historical vs Forecast"
         )
@@ -267,8 +258,8 @@ if run:
         ax2.plot(
             monthly_prices.index,
             monthly_prices.values,
-            label="Historical Prices",
-            linewidth=2
+            linewidth=2,
+            label="Historical Prices"
         )
 
         ax2.plot(
@@ -276,11 +267,11 @@ if run:
             forecast.values,
             marker="o",
             linewidth=2,
-            label="Forecast Prices"
+            label="Forecast"
         )
 
         ax2.set_title(
-            f"{ticker} Price Forecast"
+            f"{ticker} Forecast"
         )
 
         ax2.set_xlabel("Date")
@@ -294,9 +285,9 @@ if run:
 
         st.divider()
 
-        # ----------------------------
+        # -----------------------------------------
         # RECENT DATA
-        # ----------------------------
+        # -----------------------------------------
         with st.expander(
             "📄 View Recent Stock Data"
         ):
@@ -306,6 +297,4 @@ if run:
             )
 
     except Exception as e:
-        st.error(
-            f"Error: {e}"
-        )
+        st.error(f"Error: {e}")
