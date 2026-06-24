@@ -2,32 +2,32 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
+import matplotlib.pyplot as plt
 from statsmodels.tsa.arima.model import ARIMA
 import warnings
 
 warnings.filterwarnings("ignore")
 
-# --------------------------------------------------
+# --------------------------
 # PAGE CONFIG
-# --------------------------------------------------
+# --------------------------
 st.set_page_config(
     page_title="Investor Dashboard",
     page_icon="📈",
     layout="wide"
 )
 
-# --------------------------------------------------
+# --------------------------
 # HEADER
-# --------------------------------------------------
+# --------------------------
 st.title("📈 Investor Dashboard")
 st.caption(
     "Yahoo Finance + Technical Indicators + ARIMA Forecast"
 )
 
-# --------------------------------------------------
+# --------------------------
 # SIDEBAR
-# --------------------------------------------------
+# --------------------------
 st.sidebar.title("⚙️ Dashboard Settings")
 
 ticker = st.sidebar.text_input(
@@ -39,14 +39,14 @@ run = st.sidebar.button(
     "🚀 Generate Dashboard"
 )
 
-# --------------------------------------------------
+# --------------------------
 # MAIN APP
-# --------------------------------------------------
+# --------------------------
 if run:
 
     try:
 
-        with st.spinner("Fetching data..."):
+        with st.spinner("Fetching stock data..."):
 
             data = yf.download(
                 ticker,
@@ -54,8 +54,6 @@ if run:
                 auto_adjust=True,
                 progress=False
             )
-
-            stock = yf.Ticker(ticker)
 
         if data.empty:
             st.error("No data found.")
@@ -68,12 +66,20 @@ if run:
 
         close_prices = close_prices.dropna()
 
-        # --------------------------------------------------
-        # BASIC METRICS
-        # --------------------------------------------------
-        current_price = float(close_prices.iloc[-1])
-        high_price = float(close_prices.max())
-        low_price = float(close_prices.min())
+        # --------------------------
+        # METRICS
+        # --------------------------
+        current_price = float(
+            close_prices.iloc[-1]
+        )
+
+        high_price = float(
+            close_prices.max()
+        )
+
+        low_price = float(
+            close_prices.min()
+        )
 
         returns = close_prices.pct_change()
 
@@ -86,8 +92,7 @@ if run:
         cagr = (
             (
                 close_prices.iloc[-1]
-                /
-                close_prices.iloc[0]
+                / close_prices.iloc[0]
             ) ** (1 / 5)
             - 1
         ) * 100
@@ -123,94 +128,104 @@ if run:
 
         st.divider()
 
-        # --------------------------------------------------
+        # --------------------------
         # COMPANY INFORMATION
-        # --------------------------------------------------
+        # --------------------------
+        stock = yf.Ticker(ticker)
         info = stock.info
 
         st.subheader("🏢 Company Information")
 
-        c1, c2, c3 = st.columns(3)
+        col1, col2, col3 = st.columns(3)
 
-        c1.metric(
+        col1.metric(
             "Sector",
             info.get("sector", "N/A")
         )
 
-        c2.metric(
+        col2.metric(
             "Industry",
             info.get("industry", "N/A")
         )
 
-        market_cap = info.get("marketCap")
+        market_cap = info.get(
+            "marketCap",
+            None
+        )
 
         if market_cap:
-            market_cap = f"₹{market_cap:,.0f}"
+            market_cap = f"{market_cap:,.0f}"
         else:
             market_cap = "N/A"
 
-        c3.metric(
+        col3.metric(
             "Market Cap",
             market_cap
         )
 
         st.divider()
 
-        # --------------------------------------------------
+        # --------------------------
         # MOVING AVERAGES
-        # --------------------------------------------------
-        ma50 = close_prices.rolling(50).mean()
-        ma200 = close_prices.rolling(200).mean()
+        # --------------------------
+        ma50 = (
+            close_prices
+            .rolling(50)
+            .mean()
+        )
+
+        ma200 = (
+            close_prices
+            .rolling(200)
+            .mean()
+        )
 
         st.subheader(
             "📈 Last 5 Years Price Chart"
         )
 
-        fig = go.Figure()
-
-        fig.add_trace(
-            go.Scatter(
-                x=close_prices.index,
-                y=close_prices,
-                mode="lines",
-                name="Close Price"
-            )
+        fig, ax = plt.subplots(
+            figsize=(14, 6)
         )
 
-        fig.add_trace(
-            go.Scatter(
-                x=ma50.index,
-                y=ma50,
-                mode="lines",
-                name="50 DMA"
-            )
+        ax.plot(
+            close_prices.index,
+            close_prices,
+            label="Close Price",
+            linewidth=2
         )
 
-        fig.add_trace(
-            go.Scatter(
-                x=ma200.index,
-                y=ma200,
-                mode="lines",
-                name="200 DMA"
-            )
+        ax.plot(
+            ma50.index,
+            ma50,
+            label="50 DMA",
+            linewidth=1.5
         )
 
-        fig.update_layout(
-            template="plotly_dark",
-            height=600,
-            hovermode="x unified",
-            xaxis_title="Date",
-            yaxis_title="Price"
+        ax.plot(
+            ma200.index,
+            ma200,
+            label="200 DMA",
+            linewidth=1.5
         )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
+        ax.set_title(
+            f"{ticker} Price Chart"
         )
 
-        # --------------------------------------------------
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Price")
+        ax.legend()
+        ax.grid(alpha=0.3)
+
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+
+        st.pyplot(fig)
+
+        # --------------------------
         # TREND SIGNAL
-        # --------------------------------------------------
+        # --------------------------
         if ma50.iloc[-1] > ma200.iloc[-1]:
             st.success(
                 "🟢 Golden Cross: Bullish Trend"
@@ -222,11 +237,16 @@ if run:
 
         st.divider()
 
-        # --------------------------------------------------
-        # 52 WEEK HIGH LOW
-        # --------------------------------------------------
-        high_52 = close_prices.tail(252).max()
-        low_52 = close_prices.tail(252).min()
+        # --------------------------
+        # 52 WEEK HIGH/LOW
+        # --------------------------
+        high_52 = (
+            close_prices.tail(252).max()
+        )
+
+        low_52 = (
+            close_prices.tail(252).min()
+        )
 
         c1, c2 = st.columns(2)
 
@@ -242,9 +262,9 @@ if run:
 
         st.divider()
 
-        # --------------------------------------------------
+        # --------------------------
         # ARIMA FORECAST
-        # --------------------------------------------------
+        # --------------------------
         monthly_prices = (
             close_prices
             .resample("ME")
@@ -265,14 +285,12 @@ if run:
         months_ahead = (
             (
                 target_date.year
-                -
-                monthly_prices.index[-1].year
+                - monthly_prices.index[-1].year
             ) * 12
             +
             (
                 target_date.month
-                -
-                monthly_prices.index[-1].month
+                - monthly_prices.index[-1].month
             )
         )
 
@@ -296,11 +314,9 @@ if run:
         upside = (
             (
                 predicted_price
-                -
-                current_price
+                - current_price
             )
-            /
-            current_price
+            / current_price
         ) * 100
 
         st.subheader(
@@ -319,84 +335,38 @@ if run:
             f"{upside:.2f}%"
         )
 
-        # --------------------------------------------------
-        # FORECAST CHART
-        # --------------------------------------------------
-        fig2 = go.Figure()
-
-        fig2.add_trace(
-            go.Scatter(
-                x=monthly_prices.index,
-                y=monthly_prices,
-                mode="lines",
-                name="Historical"
-            )
+        fig2, ax2 = plt.subplots(
+            figsize=(14, 6)
         )
 
-        fig2.add_trace(
-            go.Scatter(
-                x=forecast_dates,
-                y=forecast,
-                mode="lines+markers",
-                name="Forecast"
-            )
+        ax2.plot(
+            monthly_prices.index,
+            monthly_prices,
+            label="Historical",
+            linewidth=2
         )
 
-        fig2.update_layout(
-            template="plotly_dark",
-            height=600,
-            hovermode="x unified",
-            xaxis_title="Date",
-            yaxis_title="Price"
+        ax2.plot(
+            forecast_dates,
+            forecast,
+            marker="o",
+            linewidth=2,
+            label="Forecast"
         )
 
-        st.plotly_chart(
-            fig2,
-            use_container_width=True
-        )
+        ax2.legend()
+        ax2.grid(alpha=0.3)
+
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+
+        st.pyplot(fig2)
 
         st.divider()
 
-        # --------------------------------------------------
-        # NEWS
-        # --------------------------------------------------
-        st.subheader("📰 Latest News")
-
-        news = stock.news[:5]
-
-        if news:
-
-            for item in news:
-
-                title = item.get(
-                    "title",
-                    "No Title"
-                )
-
-                link = item.get(
-                    "link",
-                    None
-                )
-
-                if link:
-                    st.markdown(
-                        f"- [{title}]({link})"
-                    )
-                else:
-                    st.write(
-                        f"- {title}"
-                    )
-
-        else:
-            st.info(
-                "No recent news available."
-            )
-
-        st.divider()
-
-        # --------------------------------------------------
+        # --------------------------
         # RECENT DATA
-        # --------------------------------------------------
+        # --------------------------
         with st.expander(
             "📄 View Recent Stock Data"
         ):
